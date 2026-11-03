@@ -21,7 +21,7 @@ CausalWalk
 ```
 
 # Environment
-Install python dependencies.
+Use Python 3.10 or 3.11, then install the project dependencies.
 ```
 pip install -r requirements.txt
 ```
@@ -60,6 +60,22 @@ CUDA_VISIBLE_DEVICES="0" python train_causal_walk_politihop_2way.py \
 --evi_num 20 \
 --max_seq_length 128 
 ```
+
+# Local prediction demo
+Download and place the datasets and pretrained files as described above. Train one of
+the models below first so its fine-tuned checkpoint is saved under
+`outputs/<experiment>/models/`. If that experiment already has a `results.json`,
+pass `--overwrite` to train again and generate fresh checkpoints.
+
+Start the local web app from the repository root:
+```
+python predict_local.py
+```
+Then open `http://127.0.0.1:8000`. Select the model, enter a claim, and paste one
+evidence sentence per line. The first prediction may take time while the app loads
+the model and computes training-set cluster centers. The server binds to localhost
+by default and does not expose itself to the network.
+
 # Citation
 ```
 @inproceedings{zhang2024causal,

@@ -8,9 +8,7 @@ from torch.optim.lr_scheduler import StepLR
 import torch.nn.functional as F
 from tqdm import tqdm
 from torch.utils.data import TensorDataset, DataLoader
-import texar.torch as tx
 from pathlib import Path
-from shutil import copyfile
 import json
 
 from utils import init_logger, load_pair_data, cal_nwgm_center_attention
@@ -29,6 +27,7 @@ parser.add_argument('--weight_decay', type=float, default=5e-4, help='Weight dec
 
 parser.add_argument("--evi_num", type=int, default=5, help='Evidence num.')
 parser.add_argument("--max_seq_length", default=128, type=int,)
+parser.add_argument("--overwrite", action="store_true", help="Run training even if results.json already exists.")
 
 args = parser.parse_args()
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -58,21 +57,14 @@ causal_method = "nwgm_attention"
 n_cluster = 10
 opt_steps = 1
 
-tx.utils.maybe_create_dir(dir_path)
-if not os.path.exists(dir_path):
-    os.mkdir(dir_path)
-if os.path.exists(dir_path / 'results.json'):
+dir_path.mkdir(parents=True, exist_ok=True)
+if os.path.exists(dir_path / 'results.json') and not args.overwrite:
     print(dir_path / 'results already exists!')
     exit(0)
 else:
     print(dir_path)
-# 将当前实验的代码复制到日志文件夹
-# tx.utils.maybe_create_dir(dir_path / 'code')
-# for i in Path().iterdir():
-#     if i.is_file():
-#         copyfile(i,dir_path / 'code' / i)
 logger = init_logger(dir_path / "log.log")
-tx.utils.maybe_create_dir(dir_path / 'models')
+(dir_path / "models").mkdir(parents=True, exist_ok=True)
 
 def correct_prediction(output, labels):
     preds = output.max(1)[1].type_as(labels)
@@ -93,7 +85,7 @@ def eval_model(model, dev_data_list, best_accuracy, accuracy, step, best_step):
                 data = [i.to(device) for i in data]
                 input_ids, input_mask, segment_ids, labels, sent_labels, evi_labels = data
 
-                outputs, outputs1, probability = model(data, train_centers, True)  # probability [batch,6,6]
+                outputs, outputs1, probability = model(data, dev_centers_list[path], True)  # probability [batch,6,6]
                 loss = F.cross_entropy(outputs, labels)
                 loss1 = F.cross_entropy(outputs1, labels)
                 loss = loss + loss1

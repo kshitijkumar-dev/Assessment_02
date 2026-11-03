@@ -140,7 +140,7 @@ from models import ONE_ATTENTION_with_bert
 def cal_nwgm_center(model_path, dataloader, nclass, device, feature_num, evi_num):
     model = ONE_ATTENTION_with_bert(feature_num, nclass, evi_num)
     model = model.to(device)
-    checkpoint = torch.load(model_path)
+    checkpoint = torch.load(model_path, map_location=device)
     model.load_state_dict(checkpoint['model'])
     model.eval()
     graph_rep_list = []
@@ -176,7 +176,7 @@ def cal_nwgm_center_attention(model_path, dataloader, nclass, device, feature_nu
     else:
         model = ONE_ATTENTION_with_bert(feature_num, nclass, evi_num)
     model = model.to(device)
-    checkpoint = torch.load(model_path)
+    checkpoint = torch.load(model_path, map_location=device)
     model.load_state_dict(checkpoint['model'])
     model.eval()
     graph_rep_list = []
