@@ -189,22 +189,21 @@ class PredictionService:
         variants = {}
         for key, config in VARIANTS.items():
             output_dir = ROOT / config["output_dir"] / "models"
-            checkpoints = sorted(output_dir.glob("*.pt")) if output_dir.is_dir() else []
+            checkpoint = output_dir / "best.pt"
             required = [
                 ROOT / "pretrained_models" / "BERT-Pair" / "vocab.txt",
                 ROOT / "pretrained_models" / "BERT-Pair" / "config.json",
                 ROOT / "pretrained_models" / "BERT-Pair" / "pytorch_model.bin",
                 ROOT / config["graph_model"],
                 ROOT / config["train_data"],
+                checkpoint,
             ]
             missing = [str(path.relative_to(ROOT)) for path in required if not path.is_file()]
-            if not checkpoints:
-                missing.append(f"{config['output_dir']}/models/*.pt (fine-tuned checkpoint)")
             variants[key] = {
                 "name": config["name"],
                 "ready": not missing,
                 "missing": missing,
-                "checkpoint_count": len(checkpoints),
+                "checkpoint_count": int(checkpoint.is_file()),
             }
         return {"variants": variants}
 
@@ -300,23 +299,7 @@ class PredictionService:
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         checkpoint_dir = ROOT / config["output_dir"] / "models"
-        checkpoints = sorted(checkpoint_dir.glob("*.pt"))
-        results_path = ROOT / config["output_dir"] / "results.json"
-        scores_by_name = {}
-        if results_path.is_file():
-            with results_path.open(encoding="utf-8") as results_file:
-                results = json.load(results_file)
-            scores_by_name = {
-                f"{Path(dataset_path).name}.pt": float(score)
-                for dataset_path, score in results.get("best_accuracy", {}).items()
-            }
-        checkpoint_path = max(
-            checkpoints,
-            key=lambda path: (
-                scores_by_name.get(path.name, float("-inf")),
-                path.stat().st_mtime,
-            ),
-        )
+        checkpoint_path = checkpoint_dir / "best.pt"
         train_data = build_dataset(
             str(ROOT / config["train_data"]),
             config["evidence_count"],

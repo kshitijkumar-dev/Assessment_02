@@ -29,6 +29,8 @@ parser.add_argument("--max_seq_length", default=128, type=int,)
 parser.add_argument("--overwrite", action="store_true", help="Run training even if results.json already exists.")
 
 args = parser.parse_args()
+if args.batch_size < 1 or args.epochs < 1 or args.evi_num < 1 or args.max_seq_length < 3:
+    parser.error("batch_size, epochs, and evi_num must be positive; max_seq_length must be at least 3.")
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # device = "cpu"
 
@@ -38,7 +40,7 @@ torch.manual_seed(args.seed)
 torch.cuda.manual_seed(args.seed)
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
-torch.use_deterministic_algorithms(True)
+torch.use_deterministic_algorithms(True, warn_only=True)
 
 dir_path = Path('outputs/causal_walk_politihop_3way/')
 
@@ -53,6 +55,7 @@ dev_file_paths = [
     "data/politihop/original/Hard_PolitiHop_by_gpt-3.5.json",
     "data/politihop/original/Hard_PolitiHop_by_gpt-4.0.json",
     ]
+checkpoint_selection_path = dev_file_paths[0]
 graph_rep_model_path = "pretrained_models/graph_rep_model_politihop.pt"
 nclass = 3
 max_length = 5
@@ -67,8 +70,12 @@ if os.path.exists(dir_path / 'results.json') and not args.overwrite:
     exit(0)
 else:
     print(dir_path)
-logger = init_logger(dir_path / "log.log")
 (dir_path / "models").mkdir(parents=True, exist_ok=True)
+if args.overwrite:
+    for output_file in (dir_path / "results.json", dir_path / "models" / "best.pt"):
+        if output_file.exists():
+            output_file.unlink()
+logger = init_logger(dir_path / "log.log", overwrite=args.overwrite)
 
 def correct_prediction(output, labels):
     preds = output.max(1)[1].type_as(labels)
@@ -76,8 +83,9 @@ def correct_prediction(output, labels):
     correct = correct.sum()
     return correct
 
-def eval_model(model, dev_data_list, best_accuracy, accuracy, step, best_step):
+def eval_model(model, dev_data_list, best_accuracy, accuracy, step, best_step, save_checkpoint=True):
     model.eval()
+    current_accuracy = {}
     for path in dev_data_list:
         dev_data = dev_data_list[path]
         dev_dataloader = DataLoader(dev_data, batch_size=args.batch_size, shuffle=False)
@@ -89,9 +97,9 @@ def eval_model(model, dev_data_list, best_accuracy, accuracy, step, best_step):
                 data = [i.to(device) for i in data]
                 input_ids, input_mask, segment_ids, labels, sent_labels, evi_labels = data
 
-                outputs, outputs1, probability = model(data, dev_centers_list[path], True)  # probability [batch,6,6]
-                loss = F.cross_entropy(outputs, labels)
-                loss1 = F.cross_entropy(outputs1, labels)
+                outputs, outputs1, probability = model(data, train_centers, True)  # probability [batch,6,6]
+                loss = F.nll_loss(torch.log(outputs.clamp_min(1e-12)), labels)
+                loss1 = F.nll_loss(torch.log(outputs1.clamp_min(1e-12)), labels)
                 loss = loss + loss1
                 # loss = loss_func(outputs, labels)
 
@@ -117,16 +125,18 @@ def eval_model(model, dev_data_list, best_accuracy, accuracy, step, best_step):
         logger.info('%s Dev total acc: %lf, total loss: %lf\r\n' % (path, dev_accuracy, dev_loss))
 
         accuracy[path].append(dev_accuracy.item())
+        current_accuracy[path] = dev_accuracy.item()
 
-        if dev_accuracy > best_accuracy[path]:
+        if save_checkpoint and path == checkpoint_selection_path and dev_accuracy > best_accuracy[path]:
             best_accuracy[path] = dev_accuracy.item()
             best_step[path] = step
             torch.save({'model': model.state_dict(),
                         'best_accuracy': best_accuracy[path],
-                        'dev_losses': dev_loss},
-                        '%s/models/%s.pt' % (dir_path,path.split("/")[-1]))
+                        'dev_losses': dev_loss,
+                        'selection_dataset': path},
+                       dir_path / "models" / "best.pt")
     model.train()
-    return best_accuracy, accuracy, best_step
+    return best_accuracy, accuracy, best_step, current_accuracy
 
 logger.info("load data...")
 train_data = build_dataset(train_data_path, args.evi_num, args.max_seq_length)
@@ -136,20 +146,13 @@ total_steps = len(train_dataloader) * args.epochs / opt_steps
 
 feature_num = 768
 dev_data_list = {}
-best_accuracy = {}
-best_step = {}
+best_accuracy = {checkpoint_selection_path: -1.0}
+best_step = {checkpoint_selection_path: 0}
 accuracy = {}
-dev_centers_list = {}
 for path in dev_file_paths:
     dev_data = build_dataset(path, args.evi_num, args.max_seq_length)
     dev_data_list[path] = dev_data
-    best_accuracy[path] = 0.0
     accuracy[path] = []
-    best_step[path] = 0
-    dev_dataloader = DataLoader(dev_data, batch_size=args.batch_size, shuffle=False)
-    dev_dataloader = tqdm(dev_dataloader)
-    dev_centers_list[path] = cal_nwgm_center_attention(graph_rep_model_path, dev_dataloader, nclass, device, feature_num, args.evi_num, n_cluster)
-
 feature_num = 768
 model = Walk_with_bert(feature_num, nclass, max_length, beam_size, args.evi_num, causal_method)
 optimizer = optim.Adam(model.parameters(),lr=args.lr,weight_decay=args.weight_decay)
@@ -170,8 +173,8 @@ for epoch in range(args.epochs):
         input_ids, input_mask, segment_ids, labels, sent_labels, evi_labels = data  # sent_labels [batch,6] evi_labels [batch,6]
     
         outputs, outputs1, probability = model(data, train_centers, True)  # probability [batch,6,6]
-        loss = F.cross_entropy(outputs, labels)
-        loss1 = F.cross_entropy(outputs1, labels)
+        loss = F.nll_loss(torch.log(outputs.clamp_min(1e-12)), labels)
+        loss1 = F.nll_loss(torch.log(outputs1.clamp_min(1e-12)), labels)
         loss = loss + loss1
         # loss = loss_func(outputs, labels)
 
@@ -206,8 +209,26 @@ for epoch in range(args.epochs):
     train_loss = running_loss / len(train_dataloader)
     train_accuracy = correct_pred / len(train_data)
     logger.info('epoch: %d, Train acc: %lf, total loss: %lf\r\n' % (epoch, train_accuracy, train_loss))
-    best_accuracy, accuracy, best_step = eval_model(model, dev_data_list, best_accuracy, accuracy, step, best_step)
+    best_accuracy, accuracy, best_step, _ = eval_model(
+        model,
+        {checkpoint_selection_path: dev_data_list[checkpoint_selection_path]},
+        best_accuracy,
+        accuracy,
+        step,
+        best_step,
+    )
 
+checkpoint = torch.load(dir_path / "models" / "best.pt", map_location=device)
+model.load_state_dict(checkpoint["model"])
+_, _, _, final_accuracy = eval_model(
+    model,
+    dev_data_list,
+    best_accuracy.copy(),
+    {path: [] for path in dev_data_list},
+    step,
+    best_step.copy(),
+    save_checkpoint=False,
+)
 logger.info(json.dumps(best_accuracy,indent=True))
 logger.info(json.dumps(best_step,indent=True))
 logger.info("total_steps: %d"%total_steps)
@@ -216,8 +237,8 @@ res = {
     "total_steps":total_steps,
     "best_accuracy":best_accuracy,
     "best_step":best_step,
+    "final_accuracy":final_accuracy,
     "accuracy":accuracy,
 }
-fout = open(dir_path / 'results.json', 'w')
-fout.write(json.dumps(res,indent=True))
-fout.close()
+with (dir_path / "results.json").open("w", encoding="utf-8") as fout:
+    json.dump(res, fout, indent=2)

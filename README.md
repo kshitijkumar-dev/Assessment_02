@@ -19,11 +19,25 @@ CausalWalk
     ├── train.sh
     └── utils.py
 ```
+The dataset files are read as JSON Lines (one JSON example per line). Keep the
+pretrained BERT folder and graph-representation checkpoint files in
+`pretrained_models/`; they are not included in this repository.
+The checked-in `outputs/` logs and JSON files are pre-existing run artifacts;
+they were produced before the fixes below and are not results from the corrected
+training code. Re-run training to produce current results and a `models/best.pt`
+checkpoint.
 
 # Environment
 Use Python 3.10 or 3.11, then install the project dependencies.
 ```
 pip install -r requirements.txt
+```
+On Windows PowerShell, create an isolated Python 3.11 environment with:
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
 # Reproduction
@@ -38,6 +52,19 @@ CUDA_VISIBLE_DEVICES="0" python train_causal_walk_fever_2way.py \
 --evi_num 5 \
 --max_seq_length 128
 ```
+On Windows, run one experiment from the repository root (the script automatically
+uses CUDA when available and CPU otherwise):
+```powershell
+python .\train_causal_walk_fever_2way.py --seed 1234 --batch_size 16 --lr 2e-5 --epochs 20 --weight_decay 5e-4 --evi_num 5 --max_seq_length 128 --overwrite
+python .\train_causal_walk_politihop_3way.py --seed 1234 --batch_size 4 --lr 1e-5 --epochs 20 --weight_decay 5e-4 --evi_num 20 --max_seq_length 128 --overwrite
+python .\train_causal_walk_politihop_2way.py --seed 1234 --batch_size 4 --lr 1e-5 --epochs 10 --weight_decay 5e-4 --evi_num 20 --max_seq_length 128 --overwrite
+```
+Run only the experiment you need. The 2-way PolitiHop run has no separate validation file in
+its configured data paths, so it saves the final epoch checkpoint. The FEVER and
+3-way PolitiHop runs select the checkpoint using their first validation dataset;
+test datasets do not select checkpoints. `results.json` records validation scores
+per epoch under `accuracy` (empty for 2-way PolitiHop) and evaluates the selected
+checkpoint once on every configured dataset under `final_accuracy`.
 Trained on the PolitiHop dataset and evaluated on Adversarial PolitiHop. (3-way)
 ```
 CUDA_VISIBLE_DEVICES="0" python train_causal_walk_politihop_3way.py \

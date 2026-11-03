@@ -302,7 +302,7 @@ class Walk_with_bert(nn.Module):
 
         return paths_class # [10,3]
     
-    def paths_to_class_logit_nwgm_attention(self,x,paths,logits,paths_mask,evi_labels,centers):  # centers [3,n_cluster,768]
+    def paths_to_class_logit_nwgm_attention(self,x,paths,logits,paths_mask,sent_labels,centers):  # centers [3,n_cluster,768]
         # [batch,6,768] [batch,5,4] [batch,5] [batch,5,4] [batch,6] [3,768]
         paths = torch.LongTensor(paths).to(x.device) # [batch,5,4]
         paths_mask = torch.LongTensor(paths_mask).to(x.device) # [batch,5,4]
@@ -323,7 +323,7 @@ class Walk_with_bert(nn.Module):
 
         # 当前样本的图表示
         evidences, claims = x[:,1:,:], x[:,0,:] # [batch,5,768] # [batch,768]
-        graph_rep = self.attention(evidences, claims, evi_labels[:,1:]) # [batch,768]
+        graph_rep = self.attention(evidences, claims, sent_labels[:,1:]) # [batch,768]
         graph_rep = graph_rep.unsqueeze(1).expand(-1,shape[1],-1) # [batch,5,768]
         graph_rep = graph_rep.contiguous().view(shape[0]*shape[1],-1) # [batch*5,768]
         graph_rep = graph_rep.unsqueeze(0) # [1,batch*5,768]
@@ -420,7 +420,7 @@ class Walk_with_bert(nn.Module):
             res_claim = self.claim_classifier(claim_batch)
             res_claim, res_final, cf_final, tie = self.fusion(res_claim,res)
         elif "attention" in self.causal_method:
-            res, res1 = self.paths_to_class_logit_nwgm_attention(x, paths, logits, paths_mask, evi_labels, centers)
+            res, res1 = self.paths_to_class_logit_nwgm_attention(x, paths, logits, paths_mask, sent_labels, centers)
         else:
             res = self.paths_to_class_logit(x,paths,logits,paths_mask,sent_labels)
 
@@ -478,6 +478,10 @@ class Walk_with_bert(nn.Module):
                 top_index = heapq.nlargest(min(beam_size,len(values)), range(len(values)), values.__getitem__)
                 next_nodes = [next_nodes[j] for j in top_index] 
                 values = [values[j] for j in top_index]
+
+                if not next_nodes:
+                    top_beam_end[k] = 1
+                    continue
                 
                 new_paths += [path + [j] for j in next_nodes]
                 new_logits += [logit + torch.log(j+1e-8) for j in values]
@@ -504,16 +508,15 @@ class Walk_with_bert(nn.Module):
                 end = 0
                 if len(top_beam_paths[i]) >= max_length:
                     end = 1
-                curr_node = top_beam_paths[i][-1]
-                edge = probability[curr_node]
-                next_nodes = []
-                for j, value in enumerate(edge):
-                    if j not in path and value > 0.0:
-                        next_nodes.append(j)
-                top_index = heapq.nlargest(min(beam_size,len(values)), range(len(values)), values.__getitem__)
-                next_nodes = [next_nodes[j] for j in top_index] 
-                if all([node in top_beam_paths[i] for node in next_nodes]) or len(next_nodes)==0:
-                    end = 1
+                else:
+                    curr_node = top_beam_paths[i][-1]
+                    edge = probability[curr_node]
+                    next_nodes = [
+                        j for j, value in enumerate(edge)
+                        if j not in top_beam_paths[i] and value > 0.0
+                    ]
+                    if not next_nodes:
+                        end = 1
                 top_beam_end.append(end)
         
         # 归一化

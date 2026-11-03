@@ -10,7 +10,7 @@ from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 eps = 1e-12
 
-def init_logger(log_file=None):
+def init_logger(log_file=None, overwrite=False):
     log_format = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
@@ -20,7 +20,7 @@ def init_logger(log_file=None):
     logger.handlers = [console_handler]
 
     if log_file and log_file != '':
-        file_handler = logging.FileHandler(log_file)
+        file_handler = logging.FileHandler(log_file, mode="w" if overwrite else "a")
         file_handler.setFormatter(log_format)
         logger.addHandler(file_handler)
 
@@ -103,9 +103,9 @@ def cal_kmeans_center(graphs, n_cluster):
     all_graph_rep = torch.cat(all_graph_rep,dim=0)
     all_graph_rep = all_graph_rep.numpy()
 
-    kmeans = KMeans(n_clusters=n_cluster, random_state=0, n_init="auto").fit(all_graph_rep)
+    kmeans = KMeans(n_clusters=n_cluster, random_state=0, n_init=10).fit(all_graph_rep)
     centers = kmeans.cluster_centers_
-    centers = torch.tensor(centers)
+    centers = torch.as_tensor(centers, dtype=torch.float32)
     labels = kmeans.labels_
     logits = []
     for i in range(n_cluster):
@@ -153,7 +153,8 @@ def cal_nwgm_center(model_path, dataloader, nclass, device, feature_num, evi_num
             graph_rep_list.append(graph_rep.detach())
             all_labels.append(labels.detach())
             description = "calculate graph representation..."
-            dataloader.set_description(description)
+            if hasattr(dataloader, "set_description"):
+                dataloader.set_description(description)
     graph_rep_list = torch.cat(graph_rep_list,dim=0) # [sample_num,768]
     all_labels = torch.cat(all_labels,dim=0) # [sample_num
 
@@ -189,19 +190,24 @@ def cal_nwgm_center_attention(model_path, dataloader, nclass, device, feature_nu
             graph_rep_list.append(graph_rep.detach())
             all_labels.append(labels.detach())
             description = "calculate graph representation..."
-            dataloader.set_description(description)
+            if hasattr(dataloader, "set_description"):
+                dataloader.set_description(description)
+    if not graph_rep_list:
+        raise ValueError(f"No examples were found while computing centers from {model_path}.")
     graph_rep_list = torch.cat(graph_rep_list,dim=0) # [sample_num,768]
     all_labels = torch.cat(all_labels,dim=0) # [sample_num]
 
     z_list = []
     for i in range(nclass):
-        z_i = []
-        for j, graph in enumerate(graph_rep_list):
-            label = all_labels[j]
-            if label == i:
-                z_i.append(graph_rep_list[j].unsqueeze(0))
-        z_i = torch.cat(z_i,dim=0) # [class_i_num,768]
-        kmeans = KMeans(n_clusters=n_cluster, random_state=0).fit(z_i.cpu().numpy())
+        z_i = graph_rep_list[all_labels == i]
+        if z_i.shape[0] < n_cluster:
+            raise ValueError(
+                f"Class {i} has {z_i.shape[0]} examples, but clustering requires "
+                f"at least {n_cluster}."
+            )
+        kmeans = KMeans(n_clusters=n_cluster, random_state=0, n_init=10).fit(
+            z_i.cpu().numpy()
+        )
         labels = kmeans.labels_
         # centers = []
         # for center in range(n_cluster):
@@ -215,7 +221,9 @@ def cal_nwgm_center_attention(model_path, dataloader, nclass, device, feature_nu
         # centers = torch.cat(centers,dim=0) # [n_cluster, 768]
 
         centers = kmeans.cluster_centers_
-        centers = torch.tensor(centers) # [n_cluster,768]
+        centers = torch.as_tensor(
+            centers, dtype=graph_rep_list.dtype, device=graph_rep_list.device
+        ) # [n_cluster,768]
         # logits = []
         # for i in range(n_cluster):
         #     logits.append(sum(labels==i))
