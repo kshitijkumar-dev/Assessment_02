@@ -1,4 +1,4 @@
-import argparse
+﻿import argparse
 import json
 import math
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -82,7 +82,7 @@ PAGE = """<!doctype html>
 <main>
   <h1>Causal Walk</h1>
   <p>Fact verification using a trained Causal Walk checkpoint. Enter a claim and one evidence sentence per line.</p>
-  <div id="status" class="notice">Checking local model files…</div>
+  <div id="status" class="notice">Checking local model filesâ€¦</div>
   <form id="form">
     <label for="variant">Model</label>
     <select id="variant">
@@ -130,7 +130,7 @@ updateStatus().catch(error => {
 form.addEventListener("submit", async event => {
   event.preventDefault();
   button.disabled = true;
-  button.textContent = "Predicting…";
+  button.textContent = "Predictingâ€¦";
   resultBox.textContent = "";
   try {
     const response = await fetch("/api/predict", {
@@ -324,7 +324,7 @@ class PredictionService:
             config["evidence_count"],
             "nwgm_attention",
         ).to(device)
-        checkpoint = torch.load(checkpoint_path, map_location=device)
+        checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
         model.load_state_dict(checkpoint["model"])
         model.eval()
         tokenizer = BertTokenizer.from_pretrained(

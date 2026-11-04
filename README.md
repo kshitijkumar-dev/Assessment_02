@@ -124,3 +124,20 @@ by default and does not expose itself to the network.
 <img width="591" height="341" alt="image" src="https://github.com/user-attachments/assets/dedd8f72-f38b-4155-8684-449627c9fced" />
 <img width="803" height="585" alt="image" src="https://github.com/user-attachments/assets/14dcc1b4-aeac-44ac-8cb9-9acddd3714f3" />
 
+## Execution Results
+
+Ran on Python 3.11 with torch 2.11.0+cu128 because the pinned torch 2.1.0 does
+not support the RTX 5060.
+
+Code changes made for this run:
+- Set `weights_only=False` in `torch.load` calls.
+- Moved `import torch` to the first line in `train_causal_walk_politihop_2way.py`
+  and `utils.py`.
+
+### Training run -> ![Training](screenshots/output.jpeg)
+
+### Final accuracy -> ![Results](screenshots/output_02.jpeg)
+
+### Local demo
+
+Demo screenshot pending.

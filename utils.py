@@ -1,6 +1,6 @@
+import torch
 import numpy as np
 from sklearn.cluster import KMeans
-import torch
 import torch.nn.functional as F
 import json
 import logging
@@ -26,7 +26,7 @@ def init_logger(log_file=None, overwrite=False):
 
     return logger
 
-# 合并evidence图和claim图, claim中每个结点与evidence中每个结点相连接。
+# åˆå¹¶evidenceå›¾å’Œclaimå›¾, claimä¸­æ¯ä¸ªç»“ç‚¹ä¸Ževidenceä¸­æ¯ä¸ªç»“ç‚¹ç›¸è¿žæŽ¥ã€‚
 def merage_graph(claim_graph, evidence_graph):
     x1 = claim_graph["nodes"]
     x2 = evidence_graph["nodes"]
@@ -44,7 +44,7 @@ def merage_graph(claim_graph, evidence_graph):
     return graph
 
 def load_graph_data(file):
-    a = torch.load(file)
+    a = torch.load(file, weights_only=False)
     res = []
     for id in tqdm(list(a.keys())):
         label = a[id]["label"]
@@ -55,16 +55,16 @@ def load_graph_data(file):
     return res
 
 def load_pair_data(file):
-    a = torch.load(file)
+    a = torch.load(file, weights_only=False)
     claims, evidences, claim_evidences, labels, evi_labels = a.values()
     return claims, claim_evidences, labels
 
 def load_data(file): # concat sentence
-    a = torch.load(file)
+    a = torch.load(file, weights_only=False)
     indexs, labels, embeddings = a.values()
     return embeddings, labels
 
-# 合并evidence图和claim图, claim中每个结点与evidence中每个结点相连接，合并所有的claim结点，只有一个claim结点。
+# åˆå¹¶evidenceå›¾å’Œclaimå›¾, claimä¸­æ¯ä¸ªç»“ç‚¹ä¸Ževidenceä¸­æ¯ä¸ªç»“ç‚¹ç›¸è¿žæŽ¥ï¼Œåˆå¹¶æ‰€æœ‰çš„claimç»“ç‚¹ï¼Œåªæœ‰ä¸€ä¸ªclaimç»“ç‚¹ã€‚
 def merage_graph_one_claim_node(claim_graph, evidence_graph):
     x1 = claim_graph["nodes"]
     x2 = evidence_graph["nodes"]
@@ -83,7 +83,7 @@ def merage_graph_one_claim_node(claim_graph, evidence_graph):
     return graph
 
 def load_graph_data_one_claim_node(file):
-    a = torch.load(file)
+    a = torch.load(file, weights_only=False)
     res = []
     for id in tqdm(list(a.keys())):
         label = a[id]["label"]
@@ -95,7 +95,7 @@ def load_graph_data_one_claim_node(file):
 def cal_kmeans_center(graphs, n_cluster):
     all_graph_rep = []
     for graph in graphs:
-        x = graph["nodes"] # 结点特征 [200,768] 假如有200个结点
+        x = graph["nodes"] # ç»“ç‚¹ç‰¹å¾ [200,768] å‡å¦‚æœ‰200ä¸ªç»“ç‚¹
         claim_rep = x[0:graph["claim_length"]].mean(dim=0) # [768]
         evidence_rep = x[graph["claim_length"]:].mean(dim=0) # [768]
         graph_rep = torch.cat([claim_rep,evidence_rep],dim=0) # [768*2]
@@ -116,7 +116,7 @@ def cal_kmeans_center(graphs, n_cluster):
 def cal_nwgm_center(graphs, n_class):
     all_graph_rep = []
     for graph in graphs:
-        x = graph["nodes"] # 结点特征 [200,768] 假如有200个结点
+        x = graph["nodes"] # ç»“ç‚¹ç‰¹å¾ [200,768] å‡å¦‚æœ‰200ä¸ªç»“ç‚¹
         claim_rep = x[0:graph["claim_length"]].mean(dim=0) # [768]
         evidence_rep = x[graph["claim_length"]:].mean(dim=0) # [768]
         graph_rep = torch.cat([claim_rep,evidence_rep],dim=0) # [768*2]
@@ -140,7 +140,7 @@ from models import ONE_ATTENTION_with_bert
 def cal_nwgm_center(model_path, dataloader, nclass, device, feature_num, evi_num):
     model = ONE_ATTENTION_with_bert(feature_num, nclass, evi_num)
     model = model.to(device)
-    checkpoint = torch.load(model_path, map_location=device)
+    checkpoint = torch.load(model_path, map_location=device, weights_only=False)
     model.load_state_dict(checkpoint['model'])
     model.eval()
     graph_rep_list = []
@@ -177,7 +177,7 @@ def cal_nwgm_center_attention(model_path, dataloader, nclass, device, feature_nu
     else:
         model = ONE_ATTENTION_with_bert(feature_num, nclass, evi_num)
     model = model.to(device)
-    checkpoint = torch.load(model_path, map_location=device)
+    checkpoint = torch.load(model_path, map_location=device, weights_only=False)
     model.load_state_dict(checkpoint['model'])
     model.eval()
     graph_rep_list = []

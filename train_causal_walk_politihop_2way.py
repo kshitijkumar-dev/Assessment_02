@@ -1,8 +1,8 @@
+import torch
 import random, os
 os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 import argparse
 import numpy as np
-import torch
 import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
 import torch.nn.functional as F
@@ -209,7 +209,7 @@ for epoch in range(args.epochs):
             dir_path / "models" / "best.pt",
         )
 
-checkpoint = torch.load(dir_path / "models" / "best.pt", map_location=device)
+checkpoint = torch.load(dir_path / "models" / "best.pt", map_location=device, weights_only=False)
 model.load_state_dict(checkpoint["model"])
 _, _, _, final_accuracy = eval_model(
     model,

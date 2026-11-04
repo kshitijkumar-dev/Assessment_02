@@ -4,4 +4,5 @@ pretrained_models/
 .venv/
 __pycache__/
 *.py[cod]
+*.pt
 outputs/**/models/
