@@ -137,7 +137,3 @@ Code changes made for this run:
 ### Training run -> ![Training](screenshots/output.jpeg)
 
 ### Final accuracy -> ![Results](screenshots/output_02.jpeg)
-
-### Local demo
-
-Demo screenshot pending.
